@@ -1,12 +1,19 @@
-# README SVG Typing Generator
+<div align="center">
 
-**Generate production-ready animated SVG text banners for GitHub READMEs, profile pages, and any place that accepts image URLs.**
+[![SVG Animation](https://readme-svg-typing-generator.vercel.app/api?lines=README%20SVG&animation=rainbow&color=36BCF7&background=00000000&size=45&font=monospace&duration=5000&pause=1000&width=435&height=50&letterSpacing=normal&center=true&vCenter=false&multiline=false&repeat=true&random=false)](https://github.com/OstinUA)
+
+[![SVG Animation](https://readme-svg-typing-generator.vercel.app/api?lines=Typing%20Generator&animation=rainbow&color=36BCF7&background=00000000&size=45&font=monospace&duration=5000&pause=1000&width=435&height=50&letterSpacing=normal&center=true&vCenter=false&multiline=false&repeat=true&random=false)](https://github.com/OstinUA)
+
+
+**Animated SVG banners for GitHub READMEs, repositories, and websites.**
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-Online-6c74ff?style=for-the-badge&logo=vercel)](https://readme-svg-typing-generator.vercel.app/)
 [![Deploy to Vercel](https://img.shields.io/badge/Deploy-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/new/clone?repository-url=https://github.com/OstinUA/readme-SVG-typing-generator)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue?style=for-the-badge)](LICENSE)
 [![Node](https://img.shields.io/badge/Node.js-18%2B-339933?style=for-the-badge&logo=node.js)](https://nodejs.org/)
 [![API Type](https://img.shields.io/badge/API-Serverless%20SVG-0a0a0a?style=for-the-badge)](api/index.js)
+
+</div>
 
 ## Table of Contents
 
