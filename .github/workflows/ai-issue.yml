@@ -1,4 +1,4 @@
-name: Gemini Auto-Issue Generator
+name: Llama Auto-Issue Generator
 
 on:
   push:
