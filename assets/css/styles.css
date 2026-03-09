@@ -577,3 +577,27 @@
         }
 
         footer a { color: var(--accent); text-decoration: none; }
+
+
+        .params-wrap {
+            overflow-x: auto;
+        }
+
+        .params-table {
+            min-width: 640px;
+        }
+
+        @media (max-width: 560px) {
+            .row2,
+            .row3 {
+                grid-template-columns: 1fr;
+            }
+
+            .permalink-bar {
+                flex-direction: column;
+            }
+
+            .perm-btn {
+                width: 100%;
+            }
+        }
