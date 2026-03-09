@@ -5,15 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>⌨️ SVG Animation Generator</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
-        <link rel="stylesheet" href="assets/css/styles.css" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;500&family=Roboto+Slab:wght@700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="assets/css/styles.css" />
 </head>
 <body>
 
 <!-- Header -->
 <header>
     <div class="logo">
-        <span></span> SVG Animation Generator
+        <span>⌨️</span> SVG Animation Generator
     </div>
     <nav>
         <a class="gh-btn" href="https://github.com/OstinUA" target="_blank">
@@ -31,7 +32,7 @@
     <!-- Left controls -->
     <div>
         <!-- Lines input card -->
-        <div class="card" style="margin-bottom:20px">
+        <div class="card" style="margin-bottom:16px">
             <div class="card-header">Text lines</div>
             <div class="card-body">
                 <div class="field">
@@ -43,7 +44,7 @@ Welcome to my profile</textarea>
         </div>
 
         <!-- Animation card -->
-        <div class="card" style="margin-bottom:20px">
+        <div class="card" style="margin-bottom:16px">
             <div class="card-header">Animation</div>
             <div class="card-body">
                 <button type="button" class="anim-trigger" id="animPickerBtn" onclick="openAnimModal()">Select animation: <strong id="selectedAnimLabel">Typing</strong></button>
@@ -52,7 +53,7 @@ Welcome to my profile</textarea>
 
         <!-- Options card -->
         <div class="card">
-            <div class="card-header">⚙Options</div>
+            <div class="card-header">⚙ Options</div>
             <div class="card-body">
 
                 <!-- Font family field -->
@@ -189,7 +190,7 @@ Welcome to my profile</textarea>
         <div class="card">
             <div class="card-header">
                 Preview
-                <span id="previewSize" style="margin-left:auto; font-size:11px;color:var(--muted)">435 × 50 px</span>
+                <span id="previewSize" style="margin-left:auto; font-size:11px; color:var(--md-sys-color-on-surface-variant)">435 × 50 px</span>
             </div>
             <div class="card-body" style="padding:14px">
                 <div class="preview-wrap" id="previewWrap" style="min-height:80px">
@@ -293,7 +294,7 @@ Welcome to my profile</textarea>
 
 <footer>
     Made with ❤️ for GitHub profiles &bull; <a href="https://github.com/OstinUA" target="_blank">OstinUA</a>
-    &bull; Repositories <a href="https://github.com/OstinUA/readme-SVG-typing-generator" target="_blank">Readme SVG typing-generator</a>
+    &bull; <a href="https://github.com/OstinUA/readme-SVG-typing-generator" target="_blank">readme-SVG-typing-generator</a>
 </footer>
 
 <script src="assets/js/app.js" defer></script>
