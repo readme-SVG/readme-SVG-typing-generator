@@ -32,8 +32,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: |
-          pip install --no-cache-dir PyGithub==2.5.0 requests==2.32.3
+        run: pip install --no-cache-dir -r requirements.txt
 
       - name: Run AI Analysis
         env:

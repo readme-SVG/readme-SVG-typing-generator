@@ -47,6 +47,7 @@ Attributes:
 """
 
 import os
+import sys
 import json
 import re
 import time
@@ -60,10 +61,14 @@ gh_token = os.environ.get("GITHUB_TOKEN")
 model_token = os.environ.get("GH_MODELS_TOKEN")
 repo_name = os.environ.get("REPOSITORY")
 event_name = os.environ.get("EVENT_NAME")
-allowed_users = [u.strip().lower() for u in os.environ.get("ALLOWED_USER", "").split(",")]
+allowed_users = [u.strip().lower() for u in os.environ.get("ALLOWED_USER", "").split(",") if u.strip()]
 
 MODEL_NAME = "Llama-3.3-70B-Instruct"
 ENDPOINT = "https://models.inference.ai.azure.com/chat/completions"
+
+if not gh_token or not repo_name:
+    print("Missing required GITHUB_TOKEN or REPOSITORY environment variable. Skipping.")
+    sys.exit(1)
 
 # Authenticate once; the ``repo`` object is reused throughout.
 auth = Auth.Token(gh_token)
@@ -86,12 +91,15 @@ changed_files = []
 # ---------------------------------------------------------------------------
 if event_name == "push":
     commit_sha = os.environ.get("COMMIT_SHA")
+    if not commit_sha:
+        print("Missing COMMIT_SHA environment variable. Skipping.")
+        sys.exit(0)
     commit = repo.get_commit(commit_sha)
 
     actor_login = os.environ.get("GITHUB_ACTOR", "").strip().lower()
-    if actor_login not in allowed_users:
+    if not allowed_users or actor_login not in allowed_users:
         print(f"Action performed by {actor_login}, not in allowed list. Skipping.")
-        exit(0)
+        sys.exit(0)
 
     pr_match = re.search(r'\(#(\d+)\)', commit.commit.message)
     if pr_match:
@@ -110,11 +118,15 @@ if event_name == "push":
             break
 
 elif event_name == "pull_request":
-    pr_number = int(os.environ.get("PR_NUMBER"))
+    try:
+        pr_number = int(os.environ.get("PR_NUMBER"))
+    except (TypeError, ValueError):
+        print("Missing or invalid PR_NUMBER environment variable. Skipping.")
+        sys.exit(0)
     pr = repo.get_pull(pr_number)
     author_login = pr.user.login.strip().lower()
-    if author_login not in allowed_users:
-        exit(0)
+    if not allowed_users or author_login not in allowed_users:
+        sys.exit(0)
 
     pr_ref = pr
     dedup_key = f"PR #{pr_number}"
@@ -128,20 +140,22 @@ elif event_name == "pull_request":
             diff_text += "\n[Diff truncated...]"
             break
 else:
-    exit(0)
+    sys.exit(0)
 
 if len(diff_text.strip()) < 50:
     print("Diff too small to analyze. Skipping.")
-    exit(0)
+    sys.exit(0)
 
 for issue in repo.get_issues(state="all"):
     if dedup_key in (issue.body or ""):
         print(f"Issue for {dedup_key} already exists (#{issue.number}), skipping.")
-        exit(0)
+        sys.exit(0)
 
 
 def was_already_closed(title_keyword: str) -> bool:
     """Return whether a similar issue title already exists in closed issues."""
+    if not title_keyword.strip():
+        return False
     for issue in repo.get_issues(state="closed"):
         if title_keyword.lower() in (issue.title or "").lower():
             print(f"Similar closed issue found: #{issue.number} — skipping.")
@@ -151,9 +165,17 @@ def was_already_closed(title_keyword: str) -> bool:
 
 def build_permalink(filename: str, line: int = 1) -> str:
     """Build a GitHub blob permalink for a file and line number."""
+    if filename not in changed_files:
+        return ""
+    try:
+        line = max(1, int(line))
+    except (TypeError, ValueError):
+        line = 1
     sha = os.environ.get("COMMIT_SHA") or ""
     if not sha and pr_ref:
         sha = pr_ref.head.sha
+    if not sha:
+        return ""
     return f"https://github.com/{repo_name}/blob/{sha}/{filename}#L{line}"
 
 
@@ -446,10 +468,10 @@ def call_model(prompt: str, retries: int = 3, delay: int = 5) -> dict:
         except Exception as e:
             print(f"Attempt {attempt + 1} failed: {e}")
             if attempt < retries - 1:
-                time.sleep(delay)
+                time.sleep(delay * (2 ** attempt))
 
     print("All attempts failed. Exiting gracefully.")
-    exit(0)
+    sys.exit(0)
 
 
 # ---------------------------------------------------------------------------
@@ -458,23 +480,38 @@ def call_model(prompt: str, retries: int = 3, delay: int = 5) -> dict:
 
 result = call_model(prompt)
 
-title_keyword = result.get("issue_title", "")[:40]
+# The model response is untrusted input: validate its shape before use so a
+# malformed reply exits gracefully instead of raising KeyError/TypeError.
+if not isinstance(result, dict):
+    print("Model returned a non-object response. Skipping.")
+    sys.exit(0)
+
+issue_title = result.get("issue_title")
+issue_body_raw = result.get("issue_body")
+if not isinstance(issue_title, str) or not issue_title.strip() \
+        or not isinstance(issue_body_raw, str) or not issue_body_raw.strip():
+    print("Model response is missing a title or body. Skipping.")
+    sys.exit(0)
+issue_title = issue_title.strip()[:256]
+
+title_keyword = issue_title[:40]
 if was_already_closed(title_keyword):
-    exit(0)
+    sys.exit(0)
 
 affected_file = result.get("affected_file", "")
+if not isinstance(affected_file, str):
+    affected_file = ""
 affected_line = result.get("affected_line", 1)
 
-if affected_file:
-    permalink = build_permalink(affected_file, affected_line)
-    issue_body = result["issue_body"].replace("PUT_PERMALINK_HERE", permalink)
-else:
-    issue_body = result["issue_body"].replace("PUT_PERMALINK_HERE", "_No specific file identified_")
+permalink = build_permalink(affected_file, affected_line) if affected_file else ""
+issue_body = issue_body_raw.replace(
+    "PUT_PERMALINK_HERE", permalink or "_No specific file identified_"
+)
 
 actor_name = os.environ.get("GITHUB_ACTOR", "unknown")
 footer = f"\n\n---\n*Generated from {dedup_key} | Auto-detected role: `{role_key}` | Processed by actor: {actor_name}*"
 
-severity = result.get("severity", "medium").lower()
+severity = str(result.get("severity", "medium")).lower()
 severity_label_map = {
     "critical":      "severity: critical",
     "high":          "severity: high",
@@ -485,10 +522,24 @@ severity_label_map = {
     "informational": "severity: informational",
 }
 extra_labels = [severity_label_map.get(severity, "severity: medium")]
-all_labels = list(set(result.get("labels", []) + extra_labels))
+# Only apply labels that already exist in the repository: arbitrary
+# model-supplied labels would make create_issue fail (or attach unintended
+# labels), so intersect with the repository label set first.
+try:
+    existing_labels = {label.name for label in repo.get_labels()}
+except Exception as e:
+    print(f"Could not fetch repository labels: {e}")
+    existing_labels = set(extra_labels)
+requested_labels = result.get("labels", [])
+if not isinstance(requested_labels, list):
+    requested_labels = []
+all_labels = sorted({
+    label for label in requested_labels + extra_labels
+    if isinstance(label, str) and label in existing_labels
+})
 
 issue = repo.create_issue(
-    title=result["issue_title"],
+    title=issue_title,
     body=issue_body + footer,
     labels=all_labels
 )
@@ -496,7 +547,7 @@ print(f"Created issue #{issue.number}: {issue.title}")
 
 if pr_ref:
     summary = result.get("summary", "")
-    if summary:
+    if isinstance(summary, str) and summary:
         pr_comment = (
             f"### AI Analysis Summary\n\n"
             f"{summary}\n\n"

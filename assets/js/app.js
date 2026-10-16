@@ -52,14 +52,22 @@ window.addEventListener('DOMContentLoaded', () => {
 
 function renderAnimationGrid() {
     const grid = document.getElementById('animGrid');
-    grid.innerHTML = '';
+    grid.replaceChildren();
 
     ANIMATIONS.forEach(a => {
         const chip = document.createElement('button');
         chip.type = 'button';
         chip.className = 'anim-chip' + (a.id === selectedAnim ? ' active' : '');
         chip.dataset.anim = a.id;
-        chip.innerHTML = `<span class="anim-chip-title">${a.label}</span><span class="anim-chip-desc">${a.description}</span>`;
+        // Build nodes with textContent instead of innerHTML so label text
+        // can never be interpreted as markup.
+        const title = document.createElement('span');
+        title.className = 'anim-chip-title';
+        title.textContent = a.label;
+        const desc = document.createElement('span');
+        desc.className = 'anim-chip-desc';
+        desc.textContent = a.description;
+        chip.append(title, desc);
         chip.onclick = () => {
             selectedAnim = a.id;
             highlightSelectedAnimation();
@@ -156,8 +164,13 @@ function getParams() {
 }
 
 function buildQuery(params) {
+    // Every value is percent-encoded so user-typed values (for example a
+    // background hex containing "&" or "#") cannot break out of their own
+    // parameter or corrupt neighbouring ones. "lines" is the exception:
+    // getParams() already encodes each line individually and joins them
+    // with the ";" separator the API expects.
     return Object.entries(params)
-        .map(([k,v]) => `${k}=${v}`)
+        .map(([k, v]) => (k === 'lines' ? `${k}=${v}` : `${k}=${encodeURIComponent(v)}`))
         .join('&');
 }
 
@@ -207,23 +220,31 @@ function update() {
 }
 
 // Clipboard helpers
-function copyCode(id, btn) {
-    const text = document.getElementById(id).textContent;
+// navigator.clipboard is unavailable on non-secure origins and its promise
+// rejects when permission is denied; handle both so a failed copy never
+// surfaces as an unhandled rejection or a misleading "Copied!" state.
+function copyText(text, btn, doneLabel) {
+    if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
+        btn.textContent = 'Copy failed';
+        setTimeout(() => { btn.textContent = doneLabel; }, 2000);
+        return;
+    }
     navigator.clipboard.writeText(text).then(() => {
-        const orig = btn.textContent;
         btn.textContent = 'Copied!';
         btn.classList.add('copied');
-        setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 2000);
+        setTimeout(() => { btn.textContent = doneLabel; btn.classList.remove('copied'); }, 2000);
+    }).catch(() => {
+        btn.textContent = 'Copy failed';
+        setTimeout(() => { btn.textContent = doneLabel; }, 2000);
     });
 }
 
+function copyCode(id, btn) {
+    copyText(document.getElementById(id).textContent, btn, btn.textContent);
+}
+
 function copyPermalink() {
-    const text = document.getElementById('permalinkInput').value;
-    navigator.clipboard.writeText(text).then(() => {
-        const btn = document.querySelector('.perm-btn');
-        btn.textContent = 'Copied!';
-        setTimeout(() => btn.textContent = 'Copy URL', 2000);
-    });
+    copyText(document.getElementById('permalinkInput').value, document.querySelector('.perm-btn'), 'Copy URL');
 }
 
 // Code tab switching
@@ -239,9 +260,11 @@ function loadFromURL() {
     const p = new URLSearchParams(window.location.search);
     if (!p.has('lines')) return;
 
+    // URLSearchParams.get() already percent-decodes the value (and turns
+    // "+" into a space). Decoding a second time would throw URIError on
+    // legitimate lines containing a literal "%", so use the value as-is.
     const lines = (p.get('lines') || '')
         .split(';')
-        .map(l => decodeURIComponent(l.replace(/\+/g,' ')))
         .join('\n');
     document.getElementById('linesInput').value = lines;
 
@@ -254,10 +277,14 @@ function loadFromURL() {
         }
     }
     if (p.has('color')) {
-        const h = p.get('color');
-        document.getElementById('colorHex').value = h;
-        document.getElementById('colorPicker').value = '#' + h;
-        document.getElementById('colorSwatch').style.background = '#' + h;
+        // Only accept a well-formed 6-digit hex value before feeding it to
+        // the color input and inline style; anything else keeps defaults.
+        const h = (p.get('color') || '').replace('#', '');
+        if (/^[0-9a-fA-F]{6}$/.test(h)) {
+            document.getElementById('colorHex').value = h;
+            document.getElementById('colorPicker').value = '#' + h;
+            document.getElementById('colorSwatch').style.background = '#' + h;
+        }
     }
     if (p.has('size')) {
         document.getElementById('size').value = p.get('size');
@@ -273,8 +300,17 @@ function loadFromURL() {
     }
     if (p.has('width')) document.getElementById('width').value = p.get('width');
     if (p.has('height')) document.getElementById('height').value = p.get('height');
-    if (p.has('font')) document.getElementById('font').value = p.get('font');
-    if (p.has('letterSpacing')) document.getElementById('letterSpacing').value = p.get('letterSpacing');
+    // Assign select values only when the requested option actually exists;
+    // an unknown value would leave the control empty and send an empty
+    // parameter on the next update.
+    if (p.has('font')) {
+        const fontSelect = document.getElementById('font');
+        if ([...fontSelect.options].some(o => o.value === p.get('font'))) fontSelect.value = p.get('font');
+    }
+    if (p.has('letterSpacing')) {
+        const spacingSelect = document.getElementById('letterSpacing');
+        if ([...spacingSelect.options].some(o => o.value === p.get('letterSpacing'))) spacingSelect.value = p.get('letterSpacing');
+    }
 
     ['center','vCenter','multiline','repeat','random'].forEach(param => {
         if (p.has(param)) {

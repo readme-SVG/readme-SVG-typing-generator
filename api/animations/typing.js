@@ -1,8 +1,7 @@
 module.exports = (ctx) => {
     const {
         lines, intSize, intWidth, intHeight, textX, textAnchor, commonStyle,
-        textColor, center, repeat, cycleDurS, lineDurS, slotS, sequenceOpacity, clamp01, lineY,
-    } = ctx;
+        textColor, center, repeat, cycleDurS, lineDurS, slotS, sequenceOpacity, clamp01, lineY, escapeXml } = ctx;
 
     let defs = '';
     let body = '';
@@ -38,7 +37,7 @@ module.exports = (ctx) => {
 
         body += `<text x="${textX}" y="${lineY(i)}" text-anchor="${textAnchor}" style="${commonStyle}" clip-path="url(#${clipId})" opacity="0">
             ${sequenceOpacity(i)}
-            ${line}
+            ${escapeXml(line)}
         </text>
         <rect x="${tx}" y="${lineY(i) - intSize + 4}" width="2" height="${intSize}" fill="${textColor}" opacity="0">
             <animate attributeName="x"
