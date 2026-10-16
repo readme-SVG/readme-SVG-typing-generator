@@ -1,78 +1,139 @@
+'use strict';
+
 const getAnimation = require('./animations');
+const animationMap = require('./animations/index');
+
+// Hard limits that keep a single request from forcing unbounded CPU or
+// memory use (very long lines / thousands of lines produce huge SVGs).
+const MAX_LINES = 50;
+const MAX_LINE_LENGTH = 500;
+const MAX_SEPARATOR_LENGTH = 1;
+
+// Query values arrive as strings, but a crafted URL such as
+// "?lines[]=x&lines[]=y" (or a duplicated parameter) can produce an array
+// or an object. Coerce everything to a plain string before use so that
+// string methods below can never throw on unexpected types.
+const asString = (value, fallback = '') => {
+    if (Array.isArray(value)) return value.length ? asString(value[0], fallback) : fallback;
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    return fallback;
+};
+
+// decodeURIComponent throws URIError on malformed sequences such as
+// "%E0%A4%A". Fall back to the raw value instead of crashing the request.
+const safeDecode = (value) => {
+    try {
+        return decodeURIComponent(value);
+    } catch {
+        return value;
+    }
+};
+
+const clampInt = (value, fallback, min, max) => {
+    const parsed = parseInt(value, 10);
+    return Number.isFinite(parsed) ? Math.min(Math.max(parsed, min), max) : fallback;
+};
+
+// Hex colors: strip anything that is not a hex digit (prevents breaking
+// out of the fill attribute) and reject truncated/invalid lengths.
+const sanitizeHex = (value, fallback, maxLength) => {
+    const hex = asString(value).replace(/[^a-fA-F0-9]/g, '').slice(0, maxLength);
+    return [3, 4, 6, 8].includes(hex.length) ? hex : fallback;
+};
+
+// letterSpacing is interpolated into a style attribute, so only allow the
+// CSS keyword or a plain <number><unit> value. Anything else could break
+// out of the attribute (e.g. '"><script>...') and inject markup.
+const LETTER_SPACING_PATTERN = /^-?\d+(\.\d+)?(px|em|rem|pt|%)?$/;
+const sanitizeLetterSpacing = (value) => {
+    const spacing = asString(value, 'normal').trim();
+    return spacing === 'normal' || LETTER_SPACING_PATTERN.test(spacing) ? spacing : 'normal';
+};
+
+const shuffle = (items) => {
+    // Fisher-Yates shuffle on a copy; the caller's array stays untouched.
+    const result = items.slice();
+    for (let i = result.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [result[i], result[j]] = [result[j], result[i]];
+    }
+    return result;
+};
 
 module.exports = (req, res) => {
-    // ── Parse query params ──────────────────────────────────────
-    const {
-        lines: rawLines = 'Hello+World!',
-        color       = '36BCF7',
-        size        = '20',
-        animation   = 'typing',
-        duration    = '5000',
-        pause       = '1000',
-        width       = '435',
-        height      = '50',
-        font        = 'monospace',
-        background  = '00000000',
-        center      = 'false',
-        vCenter     = 'false',
-        multiline   = 'false',
-        letterSpacing = 'normal',
-        repeat      = 'true',
-        random      = 'false',
-        separator   = ';',
-    } = req.query;
+    try {
+        if (req.method && req.method !== 'GET' && req.method !== 'HEAD') {
+            res.setHeader('Allow', 'GET, HEAD');
+            res.status(405).send('Method Not Allowed');
+            return;
+        }
 
-    // Split multi-line text
-    const lines = rawLines
-        .split(separator)
-        .map(l => decodeURIComponent(l.replace(/\+/g, ' ')).trim())
-        .filter(Boolean);
+        const query = req.query || {};
 
-    if (lines.length === 0) lines.push('Hello World!');
+        // The separator must be a single character; an empty or long value
+        // would split the input into individual characters or behave
+        // unexpectedly, so fall back to the documented default.
+        const rawSeparator = asString(query.separator, ';');
+        const separator = rawSeparator.length === MAX_SEPARATOR_LENGTH ? rawSeparator : ';';
 
-    // ── Sanitize ────────────────────────────────────────────────
-    const safeColor = (color || '36BCF7').replace(/[^a-fA-F0-9]/g, '').slice(0, 6) || '36BCF7';
-    const safeBg    = (background || '00000000').replace(/[^a-fA-F0-9]/g, '').slice(0, 8) || '00000000';
-    const safeSize  = Math.min(Math.max(parseInt(size) || 20, 8), 120);
-    const safeDur   = Math.min(Math.max(parseInt(duration) || 5000, 200), 30000);
-    const safePause = Math.min(Math.max(parseInt(pause) || 1000, 0), 10000);
-    const safeW     = Math.min(Math.max(parseInt(width) || 435, 50), 1200);
-    const safeH     = Math.min(Math.max(parseInt(height) || 50, 20), 400);
+        // Split first on the raw value so an encoded separator inside a
+        // line is not mistaken for a line break, then decode each line.
+        const rawLines = asString(query.lines, 'Hello+World!');
+        let lines = rawLines
+            .split(separator)
+            .map((line) => safeDecode(line.replace(/\+/g, ' ')).trim().slice(0, MAX_LINE_LENGTH))
+            .filter(Boolean)
+            .slice(0, MAX_LINES);
 
-    const opts = {
-        lines,
-        color: safeColor,
-        size: safeSize,
-        duration: safeDur,
-        pause: safePause,
-        width: safeW,
-        height: safeH,
-        font,
-        background: safeBg,
-        center: center === 'true',
-        vCenter: vCenter === 'true',
-        multiline: multiline === 'true',
-        letterSpacing,
-        repeat: repeat !== 'false',
-        random: random === 'true',
-    };
+        if (lines.length === 0) lines = ['Hello World!'];
+        if (asString(query.random, 'false') === 'true') lines = shuffle(lines);
 
-    const validAnimations = [
-        'typing','fade','slide','bounce','pulse','blink',
-        'shake','rainbow','glitch','stroke','wave','flip',
-        'neon','matrix','zoom','blur','float','swing','pop','skew',
-    ];
-    const animType = validAnimations.includes(animation) ? animation : 'typing';
+        const safeW = clampInt(query.width, 435, 50, 1200);
+        const safeH = clampInt(query.height, 50, 20, 400);
 
-    // ── Render ──────────────────────────────────────────────────
-    const svgContent = getAnimation(animType, opts);
+        const animation = asString(query.animation, 'typing');
+        // hasOwnProperty (not a plain lookup) so inherited keys such as
+        // "constructor" or "__proto__" cannot resolve to unexpected values.
+        const animType = Object.prototype.hasOwnProperty.call(animationMap, animation)
+            ? animation
+            : 'typing';
 
-    res.setHeader('Content-Type', 'image/svg+xml');
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
+        const opts = {
+            lines,
+            color: sanitizeHex(query.color, '36BCF7', 6),
+            size: clampInt(query.size, 20, 8, 120),
+            duration: clampInt(query.duration, 5000, 200, 30000),
+            pause: clampInt(query.pause, 1000, 0, 10000),
+            width: safeW,
+            height: safeH,
+            font: asString(query.font, 'monospace'),
+            background: sanitizeHex(query.background, '00000000', 8),
+            center: asString(query.center, 'false') === 'true',
+            vCenter: asString(query.vCenter, 'false') === 'true',
+            multiline: asString(query.multiline, 'false') === 'true',
+            letterSpacing: sanitizeLetterSpacing(query.letterSpacing),
+            repeat: asString(query.repeat, 'true') !== 'false',
+            random: asString(query.random, 'false') === 'true',
+        };
 
-    res.send(`<?xml version="1.0" encoding="UTF-8"?>
+        const svgContent = getAnimation(animType, opts);
+
+        res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+        // Defense in depth: even if markup injection ever slipped through,
+        // the sandbox directive prevents script execution when the SVG is
+        // opened directly in a browser.
+        res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        // The SVG is fully determined by the query string (except in
+        // random order mode), so let browsers and CDNs cache it instead of
+        // regenerating it on every README view.
+        res.setHeader(
+            'Cache-Control',
+            opts.random ? 'no-store' : 'public, max-age=60, s-maxage=3600, stale-while-revalidate=86400'
+        );
+
+        res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg"
      xmlns:xlink="http://www.w3.org/1999/xlink"
      width="${safeW}"
@@ -80,4 +141,12 @@ module.exports = (req, res) => {
      viewBox="0 0 ${safeW} ${safeH}">
     ${svgContent}
 </svg>`);
+    } catch (err) {
+        // Never leak stack traces or internal details to the client.
+        console.error('Failed to generate SVG:', err);
+        if (!res.headersSent) {
+            res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+            res.status(500).send('Internal Server Error');
+        }
+    }
 };

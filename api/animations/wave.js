@@ -1,5 +1,5 @@
 module.exports = (ctx) => {
-    const { lines, commonStyle, intSize, lineDurS, repeat, center, intWidth, sequenceOpacity, lineY } = ctx;
+    const { lines, commonStyle, intSize, lineDurS, repeat, center, intWidth, sequenceOpacity, lineY, escapeXml } = ctx;
     return lines.map((line, rowIndex) => {
         const chars = line.split('');
         const charWidth = intSize * 0.62;
@@ -11,7 +11,7 @@ module.exports = (ctx) => {
             return `<text x="${x}" y="${lineY(rowIndex)}" style="${commonStyle}" opacity="0">
                 ${sequenceOpacity(rowIndex)}
                 <animateTransform attributeName="transform" type="translate" values="0,0;0,-${intSize * 0.4};0,0" dur="${Math.max(0.2, lineDurS * 0.45)}s" begin="${beginS.toFixed(3)}s" repeatCount="${repeat ? 'indefinite' : '1'}" />
-                ${ch}
+                ${escapeXml(ch)}
             </text>`;
         }).join('');
     }).join('');

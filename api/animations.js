@@ -1,10 +1,12 @@
+'use strict';
+
 /**
  * SVG Animation Generator — animations.js
  * Dispatcher for text animations (one file per animation)
  */
 
 const animationMap = require('./animations/index');
-const { clamp01, getLineY, buildSequenceOpacity } = require('./animations/_utils');
+const { clamp01, escapeXml, getLineY, buildSequenceOpacity } = require('./animations/_utils');
 
 const FONTS = {
     monospace: "'Courier New', Courier, monospace",
@@ -13,41 +15,41 @@ const FONTS = {
     code: "'Fira Code', 'JetBrains Mono', monospace",
 };
 
-const getAnimation = (type, {
-    lines,
-    color,
-    size,
-    duration,
-    pause,
-    width,
-    height,
-    font,
-    background,
-    center,
-    vCenter,
-    multiline,
-    letterSpacing,
-    repeat,
-}) => {
+const getAnimation = (type, opts) => {
+    const {
+        lines,
+        color,
+        size,
+        duration,
+        pause,
+        width,
+        height,
+        font,
+        background,
+        center,
+        vCenter,
+        multiline,
+        letterSpacing,
+        repeat,
+    } = opts;
+
+    // Font is resolved through a fixed allow-list; unknown names fall back
+    // to monospace so user input can never reach the style attribute raw.
     const fontFamily = FONTS[font] || FONTS.monospace;
     const textColor = `#${color}`;
     const bgColor = background && background !== '00000000' ? `#${background}` : 'transparent';
     const textAnchor = center ? 'middle' : 'start';
     const textX = center ? '50%' : '20';
 
-    const intSize = parseInt(size);
-    const intWidth = parseInt(width);
-    const intHeight = parseInt(height);
-    const intDuration = parseInt(duration);
-    const intPause = parseInt(pause);
+    // api/index.js already normalizes these to clamped integers; Number()
+    // here only guards direct callers of this module.
+    const intSize = Number(size) || 20;
+    const intWidth = Number(width) || 435;
+    const intHeight = Number(height) || 50;
+    const intDuration = Number(duration) || 5000;
+    const intPause = Number(pause) || 0;
 
-    const commonStyle = `
-        font-family: ${fontFamily};
-        font-weight: bold;
-        font-size: ${intSize}px;
-        fill: ${textColor};
-        letter-spacing: ${letterSpacing || 'normal'};
-    `;
+    const commonStyle = `font-family: ${fontFamily}; font-weight: bold; font-size: ${intSize}px; fill: ${textColor}; letter-spacing: ${letterSpacing || 'normal'};`;
 
     const lineDurS = intDuration / 1000;
     const pauseS = intPause / 1000;
@@ -75,7 +77,11 @@ const getAnimation = (type, {
         ? `<rect width="${intWidth}" height="${intHeight}" fill="${bgColor}" />`
         : '';
 
-    const renderer = animationMap[type] || animationMap.typing;
+    // Use an own-property check so values like "constructor" cannot resolve
+    // through the prototype chain to a non-renderer function.
+    const renderer = Object.prototype.hasOwnProperty.call(animationMap, type)
+        ? animationMap[type]
+        : animationMap.typing;
     const content = renderer({
         lines,
         textColor,
@@ -94,6 +100,7 @@ const getAnimation = (type, {
         slotS,
         cycleDurS,
         clamp01,
+        escapeXml,
         lineY,
         sequenceOpacity,
     });
